@@ -1,0 +1,1 @@
+"""Secam Cloud API Application."""
