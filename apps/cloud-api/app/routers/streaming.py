@@ -1,22 +1,19 @@
 """Streaming router - MJPEG video streaming for cameras."""
-import threading
 from uuid import UUID
-from typing import Dict, Optional
+from typing import Generator
 
 import cv2
-from fastapi import APIRouter, Depends, HTTPException, status, Response
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from fastapi.responses import StreamingResponse
+from sqlalchemy.orm import Session
 
 from ..db import get_db
 from ..models import Camera, User
-from ..security import get_current_user
+from ..security import get_current_user_for_media
 from ..config import settings
 from cryptography.fernet import Fernet
 
 router = APIRouter(prefix="/cameras", tags=["Streaming"])
-
-stream_cache: Dict[str, dict] = {}
-stream_lock = threading.Lock()
 
 
 def get_fernet() -> Fernet:
@@ -32,29 +29,60 @@ def decrypt_rtsp_url(encrypted_url: str, fernet: Fernet) -> str:
     return fernet.decrypt(encrypted_url.encode()).decode()
 
 
-def generate_frames(rtsp_url: str, camera_id: str):
-    """Generate MJPEG frames from RTSP stream."""
+def get_camera_for_user(db: Session, camera_id: UUID, user: User) -> Camera:
+    camera = db.query(Camera).filter(
+        Camera.id == camera_id,
+        Camera.tenant_id == user.tenant_id
+    ).first()
+
+    if not camera:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Camera not found"
+        )
+
+    return camera
+
+
+def open_camera_capture(rtsp_url: str) -> cv2.VideoCapture:
     cap = cv2.VideoCapture(rtsp_url)
-    
+
     if not cap.isOpened():
-        yield b"--frame\r\nContent-Type: text/plain\r\n\r\nStream unavailable\r\n"
-        return
+        cap.release()
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Camera stream unavailable"
+        )
+
+    return cap
+
+
+def encode_frame(frame) -> bytes:
+    ok, buffer = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 85])
+    if not ok:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to encode camera frame"
+        )
+
+    return buffer.tobytes()
+
+
+def generate_frames(cap: cv2.VideoCapture, first_frame: bytes) -> Generator[bytes, None, None]:
+    """Generate MJPEG frames from an open RTSP stream."""
+    yield (b"--frame\r\n"
+           b"Content-Type: image/jpeg\r\n\r\n" + first_frame + b"\r\n")
 
     try:
         while True:
             ret, frame = cap.read()
             if not ret:
                 break
-            
-            _, buffer = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 85])
-            frame_bytes = buffer.tobytes()
-            
+
+            frame_bytes = encode_frame(frame)
+
             yield (b"--frame\r\n"
                    b"Content-Type: image/jpeg\r\n\r\n" + frame_bytes + b"\r\n")
-    except Exception as e:
-        yield (b"--frame\r\n"
-               b"Content-Type: text/plain\r\n\r\n".encode() + 
-               f"Stream error: {str(e)}".encode() + b"\r\n")
     finally:
         cap.release()
 
@@ -62,77 +90,31 @@ def generate_frames(rtsp_url: str, camera_id: str):
 @router.get("/{camera_id}/snapshot")
 async def get_snapshot(
     camera_id: UUID,
-    token: Optional[str] = None,
-    db = Depends(get_db)
+    current_user: User = Depends(get_current_user_for_media),
+    db: Session = Depends(get_db)
 ):
     """
     Get a single snapshot from the camera.
-    Accepts token as query parameter for browser compatibility.
+    Accepts browser-compatible authentication for media requests.
     """
-    from ..security import verify_access_token
-    
-    if not token:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Token required"
-        )
-    
-    payload = verify_access_token(token)
-    if not payload:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid token"
-        )
-    
-    user_id = payload.get("sub")
-    if not user_id:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid token payload"
-        )
-    
-    user = db.query(User).filter(User.id == user_id).first()
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="User not found"
-        )
-    
-    camera = db.query(Camera).filter(
-        Camera.id == camera_id,
-        Camera.tenant_id == user.tenant_id
-    ).first()
-    
-    if not camera:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Camera not found"
-        )
-    
+    camera = get_camera_for_user(db, camera_id, current_user)
+
     fernet = get_fernet()
     rtsp_url = decrypt_rtsp_url(camera.rtsp_url_encrypted, fernet)
-    
-    cap = cv2.VideoCapture(rtsp_url)
-    
-    if not cap.isOpened():
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Camera stream unavailable"
-        )
-    
+
+    cap = open_camera_capture(rtsp_url)
+
     ret, frame = cap.read()
     cap.release()
-    
+
     if not ret:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail="Failed to capture frame"
         )
-    
-    _, buffer = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 85])
-    
+
     return Response(
-        content=buffer.tobytes(),
+        content=encode_frame(frame),
         media_type="image/jpeg"
     )
 
@@ -140,34 +122,36 @@ async def get_snapshot(
 @router.get("/{camera_id}/stream")
 async def stream_camera(
     camera_id: UUID,
-    current_user: User = Depends(get_current_user),
-    db = Depends(get_db)
+    current_user: User = Depends(get_current_user_for_media),
+    db: Session = Depends(get_db)
 ):
     """
     Stream camera video as MJPEG.
     
     Returns a continuous JPEG stream that can be displayed in an img tag.
     """
-    camera = db.query(Camera).filter(
-        Camera.id == camera_id,
-        Camera.tenant_id == current_user.tenant_id
-    ).first()
-    
-    if not camera:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Camera not found"
-        )
-    
+    camera = get_camera_for_user(db, camera_id, current_user)
+
     fernet = get_fernet()
     rtsp_url = decrypt_rtsp_url(camera.rtsp_url_encrypted, fernet)
-    
+
+    cap = open_camera_capture(rtsp_url)
+    ret, frame = cap.read()
+
+    if not ret:
+        cap.release()
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to capture initial frame"
+        )
+
     response = StreamingResponse(
-        generate_frames(rtsp_url, str(camera_id)),
+        generate_frames(cap, encode_frame(frame)),
         media_type="multipart/x-mixed-replace; boundary=frame"
     )
-    
-    response.headers["Access-Control-Allow-Origin"] = "*"
-    response.headers["Access-Control-Allow-Credentials"] = "true"
-    
+
+    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["X-Accel-Buffering"] = "no"
+
     return response

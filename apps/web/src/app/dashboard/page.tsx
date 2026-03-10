@@ -1,102 +1,12 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import axios from "axios";
 import toast, { Toaster } from "react-hot-toast";
-import WebRTCFeed from "@/components/WebRTCFeed";
-
-function SnapshotFeed({ cameraId }: { cameraId: string }) {
-  const imgRef = useRef<HTMLImageElement>(null);
-  const [error, setError] = useState(false);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    const token = localStorage.getItem("access_token");
-    
-    const updateSnapshot = () => {
-      if (imgRef.current && token) {
-        imgRef.current.src = `${API_URL}/cameras/${cameraId}/snapshot?token=${token}&t=${Date.now()}`;
-      }
-    };
-
-    updateSnapshot();
-    setLoading(false);
-
-    const interval = setInterval(updateSnapshot, 1000);
-
-    return () => clearInterval(interval);
-  }, [cameraId]);
-
-  return (
-    <div className="relative w-full h-full">
-      {loading && (
-        <div className="absolute inset-0 flex items-center justify-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white"></div>
-        </div>
-      )}
-      <img
-        ref={imgRef}
-        alt="Live feed"
-        className="w-full h-full object-cover"
-        style={{ backgroundColor: '#000' }}
-        onError={() => setError(true)}
-      />
-      {error && (
-        <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-50">
-          <p className="text-white text-sm">Error cargando stream</p>
-        </div>
-      )}
-    </div>
-  );
-}
+import LivePreviewFeed from "@/components/LivePreviewFeed";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
-
-function SnapshotFeed({ cameraId }: { cameraId: string }) {
-  const imgRef = useRef<HTMLImageElement>(null);
-  const [error, setError] = useState(false);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    const token = localStorage.getItem("access_token");
-    
-    const updateSnapshot = () => {
-      if (imgRef.current && token) {
-        imgRef.current.src = `${API_URL}/cameras/${cameraId}/snapshot?token=${token}&t=${Date.now()}`;
-      }
-    };
-
-    updateSnapshot();
-    setLoading(false);
-
-    const interval = setInterval(updateSnapshot, 1000);
-
-    return () => clearInterval(interval);
-  }, [cameraId]);
-
-  return (
-    <div className="relative w-full h-full">
-      {loading && (
-        <div className="absolute inset-0 flex items-center justify-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white"></div>
-        </div>
-      )}
-      <img
-        ref={imgRef}
-        alt="Live feed"
-        className="w-full h-full object-cover"
-        style={{ backgroundColor: '#000' }}
-        onError={() => setError(true)}
-      />
-      {error && (
-        <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-50">
-          <p className="text-white text-sm">Error cargando stream</p>
-        </div>
-      )}
-    </div>
-  );
-}
 
 interface UserInfo {
   id: string;
@@ -899,7 +809,7 @@ export default function DashboardPage() {
             </div>
             <div className="bg-gray-900 rounded-lg aspect-video flex items-center justify-center overflow-hidden">
               {selectedCamera ? (
-                <SnapshotFeed cameraId={selectedCamera.id} />
+                <LivePreviewFeed cameraId={selectedCamera.id} cameraName={selectedCamera.name} />
               ) : (
                 <div className="text-center text-white">
                   <svg className="w-16 h-16 mx-auto mb-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">

@@ -2,7 +2,7 @@
 from typing import Optional
 from uuid import UUID
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Query, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
@@ -12,48 +12,67 @@ from .models import User, Tenant
 from .schemas import TokenData
 
 # HTTP Bearer token security
-security = HTTPBearer()
+security = HTTPBearer(auto_error=False)
 
 
-async def get_current_user(
-    credentials: HTTPAuthorizationCredentials = Depends(security),
-    db: Session = Depends(get_db)
-) -> User:
-    """Get current authenticated user from JWT token."""
-    credentials_exception = HTTPException(
+def _credentials_exception(detail: str = "Could not validate credentials") -> HTTPException:
+    return HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Could not validate credentials",
+        detail=detail,
         headers={"WWW-Authenticate": "Bearer"},
     )
-    
-    token = credentials.credentials
+
+
+def _get_user_from_token(token: Optional[str], db: Session) -> User:
+    if not token:
+        raise _credentials_exception("Authentication required")
+
     payload = verify_access_token(token)
-    
+
     if payload is None:
-        raise credentials_exception
-    
+        raise _credentials_exception()
+
     user_id = payload.get("sub")
     tenant_id = payload.get("tenant_id")
-    
+
     if user_id is None or tenant_id is None:
-        raise credentials_exception
-    
-    # Get user from database
+        raise _credentials_exception()
+
     user = db.query(User).filter(
         User.id == UUID(user_id),
         User.tenant_id == UUID(tenant_id)
     ).first()
-    
+
     if user is None:
-        raise credentials_exception
-    
+        raise _credentials_exception()
+
     if user.status.value != "active":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="User account is not active"
         )
-    
+
     return user
+
+
+async def get_current_user(
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
+    db: Session = Depends(get_db)
+) -> User:
+    """Get current authenticated user from JWT token."""
+    token = credentials.credentials if credentials else None
+    return _get_user_from_token(token, db)
+
+
+async def get_current_user_for_media(
+    token: Optional[str] = Query(default=None),
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
+    db: Session = Depends(get_db)
+) -> User:
+    """Authenticate browser media requests via bearer header or query token."""
+    bearer_token = credentials.credentials if credentials else None
+    access_token = bearer_token or token
+    return _get_user_from_token(access_token, db)
 
 
 async def get_current_active_user(
@@ -92,17 +111,16 @@ async def get_current_tenant_admin(
     return current_user
 
 
-def get_token_data(credentials: HTTPAuthorizationCredentials = Depends(security)) -> TokenData:
+def get_token_data(credentials: Optional[HTTPAuthorizationCredentials] = Depends(security)) -> TokenData:
     """Extract token data without database lookup (for lightweight auth)."""
+    if credentials is None:
+        raise _credentials_exception("Authentication required")
+
     token = credentials.credentials
     payload = verify_access_token(token)
     
     if payload is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Could not validate credentials",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
+        raise _credentials_exception()
     
     return TokenData(
         user_id=payload.get("sub"),
