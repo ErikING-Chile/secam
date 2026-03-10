@@ -57,6 +57,19 @@ def open_camera_capture(rtsp_url: str) -> cv2.VideoCapture:
     return cap
 
 
+def capture_frame(cap: cv2.VideoCapture, error_detail: str):
+    ret, frame = cap.read()
+
+    if not ret:
+        cap.release()
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=error_detail
+        )
+
+    return frame
+
+
 def encode_frame(frame) -> bytes:
     ok, buffer = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 85])
     if not ok:
@@ -66,6 +79,16 @@ def encode_frame(frame) -> bytes:
         )
 
     return buffer.tobytes()
+
+
+def capture_initial_frame_bytes(cap: cv2.VideoCapture) -> bytes:
+    frame = capture_frame(cap, "Failed to capture initial frame")
+
+    try:
+        return encode_frame(frame)
+    except HTTPException:
+        cap.release()
+        raise
 
 
 def generate_frames(cap: cv2.VideoCapture, first_frame: bytes) -> Generator[bytes, None, None]:
@@ -104,14 +127,8 @@ async def get_snapshot(
 
     cap = open_camera_capture(rtsp_url)
 
-    ret, frame = cap.read()
+    frame = capture_frame(cap, "Failed to capture frame")
     cap.release()
-
-    if not ret:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="Failed to capture frame"
-        )
 
     return Response(
         content=encode_frame(frame),
@@ -136,17 +153,10 @@ async def stream_camera(
     rtsp_url = decrypt_rtsp_url(camera.rtsp_url_encrypted, fernet)
 
     cap = open_camera_capture(rtsp_url)
-    ret, frame = cap.read()
-
-    if not ret:
-        cap.release()
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="Failed to capture initial frame"
-        )
+    first_frame = capture_initial_frame_bytes(cap)
 
     response = StreamingResponse(
-        generate_frames(cap, encode_frame(frame)),
+        generate_frames(cap, first_frame),
         media_type="multipart/x-mixed-replace; boundary=frame"
     )
 

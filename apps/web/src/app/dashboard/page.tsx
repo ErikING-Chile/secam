@@ -76,6 +76,7 @@ export default function DashboardPage() {
 
   const [showLiveView, setShowLiveView] = useState(false);
   const [selectedCamera, setSelectedCamera] = useState<Camera | null>(null);
+  const [liveViewSession, setLiveViewSession] = useState(0);
 
   useEffect(() => {
     const token = localStorage.getItem("access_token");
@@ -152,6 +153,17 @@ export default function DashboardPage() {
     localStorage.removeItem("access_token");
     localStorage.removeItem("refresh_token");
     router.push("/login");
+  };
+
+  const openLiveView = (camera: Camera) => {
+    setSelectedCamera(camera);
+    setLiveViewSession((current) => current + 1);
+    setShowLiveView(true);
+  };
+
+  const closeLiveView = () => {
+    setShowLiveView(false);
+    setSelectedCamera(null);
   };
 
   const handleCreateCamera = async (e: React.FormEvent) => {
@@ -429,10 +441,7 @@ export default function DashboardPage() {
                     </div>
                     <div className="flex items-center space-x-2">
                       <button
-                        onClick={() => {
-                          setSelectedCamera(camera);
-                          setShowLiveView(true);
-                        }}
+                        onClick={() => openLiveView(camera)}
                         className="text-blue-500 hover:text-blue-700"
                         title="Ver en vivo"
                       >
@@ -796,10 +805,7 @@ export default function DashboardPage() {
             <div className="flex justify-between items-center mb-4">
               <h3 className="text-lg font-bold text-gray-900">{selectedCamera.name}</h3>
               <button
-                onClick={() => {
-                  setShowLiveView(false);
-                  setSelectedCamera(null);
-                }}
+                onClick={closeLiveView}
                 className="text-gray-500 hover:text-gray-700"
               >
                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -809,7 +815,11 @@ export default function DashboardPage() {
             </div>
             <div className="bg-gray-900 rounded-lg aspect-video flex items-center justify-center overflow-hidden">
               {selectedCamera ? (
-                <LivePreviewFeed cameraId={selectedCamera.id} cameraName={selectedCamera.name} />
+                <LivePreviewFeed
+                  key={`live-view-${selectedCamera.id}-${liveViewSession}`}
+                  cameraId={selectedCamera.id}
+                  cameraName={selectedCamera.name}
+                />
               ) : (
                 <div className="text-center text-white">
                   <svg className="w-16 h-16 mx-auto mb-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">

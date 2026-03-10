@@ -43,7 +43,7 @@ services:
     env_file:
       - .env
     environment:
-      DATABASE_URL: postgresql://secam:${POSTGRES_PASSWORD:-secam_dev_password}@postgres:5432/secam
+      DATABASE_URL: postgresql+psycopg://secam:${POSTGRES_PASSWORD:-secam_dev_password}@postgres:5432/secam
       REDIS_URL: redis://redis:6379
       JWT_SECRET: ${JWT_SECRET:-change_this_in_production}
       JWT_ALGORITHM: HS256

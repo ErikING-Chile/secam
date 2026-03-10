@@ -5,9 +5,21 @@ from sqlalchemy.orm import sessionmaker
 
 from .config import settings
 
+
+def validate_database_url(database_url: str) -> str:
+    """Reject legacy PostgreSQL URLs that do not match the runtime contract."""
+    if database_url.startswith(("postgresql://", "postgres://")):
+        raise RuntimeError(
+            "DATABASE_URL must use `postgresql+psycopg://` to match the checked-in "
+            "SQLAlchemy 2 + psycopg runtime contract. Update your local .env or "
+            "docker-compose override before starting apps/cloud-api."
+        )
+    return database_url
+
+
 # Create database engine
 engine = create_engine(
-    settings.DATABASE_URL,
+    validate_database_url(settings.DATABASE_URL),
     pool_pre_ping=True,
     pool_size=10,
     max_overflow=20,

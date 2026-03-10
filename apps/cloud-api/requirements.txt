@@ -6,7 +6,7 @@ python-multipart==0.0.6
 # Database
 sqlalchemy==2.0.25
 alembic==1.13.1
-psycopg2-binary==2.9.9
+psycopg[binary]==3.1.18
 asyncpg==0.29.0
 
 # Authentication
@@ -43,5 +43,3 @@ opencv-python-headless==4.9.0.80
 numpy<2.0
 aiortc==1.9.0
 av==12.3.0
-aiortc==1.9.0
-av

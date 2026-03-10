@@ -2,7 +2,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/Status-Active-brightgreen?style=for-the-badge" alt="Status">
-  <img src="https://img.shields.io/badge/Python-3.11+-blue?style=flat&logo=python" alt="Python">
+  <img src="https://img.shields.io/badge/Python-3.11-blue?style=flat&logo=python" alt="Python">
   <img src="https://img.shields.io/badge/Next.js-14-black?style=flat&logo=next.js" alt="Next.js">
   <img src="https://img.shields.io/badge/FastAPI-Framework-009688?style=flat&logo=fastapi" alt="FastAPI">
   <img src="https://img.shields.io/badge/Docker-Containerized-2496ED?style=flat&logo=docker" alt="Docker">
@@ -66,6 +66,7 @@
 
 - Docker y Docker Compose
 - Git
+- Python 3.11 si vas a ejecutar `apps/cloud-api` fuera de Docker
 
 ### 1. Clonar el repositorio
 
@@ -171,7 +172,7 @@ secam/
 ## 🛠️ Tecnologías
 
 ### Backend
-![Python](https://img.shields.io/badge/Python-3.11+-3776AB?style=flat&logo=python&logoColor=white)
+![Python](https://img.shields.io/badge/Python-3.11-3776AB?style=flat&logo=python&logoColor=white)
 ![FastAPI](https://img.shields.io/badge/FastAPI-009688?style=flat&logo=fastapi&logoColor=white)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-15-336791?style=flat&logo=postgresql&logoColor=white)
 ![Redis](https://img.shields.io/badge/Redis-7-DC382D?style=flat&logo=redis&logoColor=white)
@@ -254,6 +255,49 @@ secam/
    ```
 
 4. **Acceder:** `http://TU_IP:3000`
+
+---
+
+## ✅ Verificacion local de vista en vivo RTSP
+
+Usa esta rutina corta cuando quieras volver a validar el flujo de live view sin rearmar el contexto del cambio.
+
+### Backend (`apps/cloud-api`)
+
+- Usa Python 3.11 para crear o activar tu entorno virtual antes de instalar dependencias o correr pruebas.
+- El backend ahora espera `DATABASE_URL` con el driver explicito `postgresql+psycopg://...` para que local, Docker y SQLAlchemy 2 usen el mismo contrato.
+
+```bash
+cd apps/cloud-api
+python3.11 -m venv .venv
+. .venv/bin/activate
+python -m pip install -r requirements.txt
+DATABASE_URL=postgresql+psycopg://secam:password@localhost:5432/secam pytest
+```
+
+PowerShell:
+
+```powershell
+Set-Location apps/cloud-api
+py -3.11 -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install -r requirements.txt
+$env:DATABASE_URL = "postgresql+psycopg://secam:password@localhost:5432/secam"
+pytest
+```
+
+### Frontend (`apps/web`)
+
+Ejecuta estas comprobaciones ligeras en este orden:
+
+```bash
+npm test
+npm run typecheck
+npm run build
+```
+
+- `npm run lint` no entra en la verificacion repetible por ahora: `next lint` sigue siendo interactivo si falta la configuracion de ESLint local.
+- Si necesitas correr lint despues, agrega primero la configuracion de ESLint para evitar el prompt interactivo.
 
 ---
 

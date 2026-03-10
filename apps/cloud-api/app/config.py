@@ -1,6 +1,6 @@
 """Application configuration."""
 from functools import lru_cache
-from typing import List, Union
+from typing import List
 
 from pydantic_settings import BaseSettings
 
@@ -15,7 +15,7 @@ class Settings(BaseSettings):
     DEBUG: bool = True
 
     # Database
-    DATABASE_URL: str = "postgresql://secam:password@localhost:5432/secam"
+    DATABASE_URL: str = "postgresql+psycopg://secam:password@localhost:5432/secam"
 
     # Redis
     REDIS_URL: str = "redis://localhost:6379"

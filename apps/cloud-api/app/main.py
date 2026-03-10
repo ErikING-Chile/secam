@@ -1,6 +1,10 @@
 """Secam Cloud API - Main FastAPI Application."""
-from datetime import datetime
 from contextlib import asynccontextmanager
+from datetime import datetime
+
+from .runtime import validate_runtime
+
+validate_runtime()
 
 from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
