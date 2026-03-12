@@ -1,5 +1,5 @@
 """Camera router - CRUD operations for cameras."""
-from typing import List
+from typing import List, cast
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -8,7 +8,8 @@ from sqlalchemy.orm import Session
 from cryptography.fernet import Fernet
 from ..db import get_db
 from ..models import Camera, User, AuditLog
-from ..schemas import CameraCreate, CameraResponse, CameraUpdate
+from ..rtsp_diagnostics import diagnose_rtsp_url
+from ..schemas import CameraCreate, CameraResponse, CameraUpdate, RTSPDiagnosticResponse
 from ..security import get_current_user
 from ..config import settings
 
@@ -199,16 +200,14 @@ async def delete_camera(
     return None
 
 
-@router.post("/{camera_id}/test")
+@router.post("/{camera_id}/test", response_model=RTSPDiagnosticResponse)
 async def test_camera_connection(
     camera_id: UUID,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """
-    Test camera connection (returns decrypted RTSP URL for testing).
-    
-    Note: In production, this should verify connection without exposing the URL.
+    Test camera connection and return structured diagnostics.
     """
     camera = db.query(Camera).filter(
         Camera.id == camera_id,
@@ -222,12 +221,10 @@ async def test_camera_connection(
         )
     
     fernet = get_fernet()
-    rtsp_url = decrypt_rtsp_url(camera.rtsp_url_encrypted, fernet)
-    
-    return {
-        "camera_id": str(camera.id),
-        "camera_name": camera.name,
-        "rtsp_url": rtsp_url,
-        "status": camera.status,
-        "message": "RTSP URL decrypted successfully. Use this to test connection."
-    }
+    rtsp_url = decrypt_rtsp_url(cast(str, camera.rtsp_url_encrypted), fernet)
+
+    diagnostic = diagnose_rtsp_url(rtsp_url)
+    diagnostic.camera_id = camera.id
+    diagnostic.camera_name = camera.name
+
+    return diagnostic

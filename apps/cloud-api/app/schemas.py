@@ -129,6 +129,73 @@ class CameraUpdate(BaseModel):
     config: Optional[dict] = None
 
 
+class RTSPDiagnosticStatus(str, Enum):
+    """Overall RTSP diagnostic status."""
+
+    OK = "ok"
+    FAILED = "failed"
+
+
+class RTSPDiagnosticCategory(str, Enum):
+    """Normalized RTSP diagnostic category."""
+
+    SUCCESS = "success"
+    INVALID_URL = "invalid_url"
+    LOOPBACK_IN_DOCKER = "loopback_in_docker"
+    DNS_FAILURE = "dns_failure"
+    CONNECTION_REFUSED = "connection_refused"
+    CONNECTION_TIMEOUT = "connection_timeout"
+    STREAM_OPEN_FAILED = "stream_open_failed"
+    FIRST_FRAME_TIMEOUT = "first_frame_timeout"
+
+
+class RTSPDiagnosticRuntimeMode(str, Enum):
+    """Where the backend is executing from."""
+
+    HOST = "host"
+    DOCKER = "docker"
+
+
+class RTSPDiagnosticRuntimeContext(BaseModel):
+    """Backend runtime facts relevant to RTSP troubleshooting."""
+
+    execution_mode: RTSPDiagnosticRuntimeMode
+    containerized: bool
+    hostname: str
+
+
+class RTSPDiagnosticTarget(BaseModel):
+    """Sanitized target facts safe to return to operators."""
+
+    scheme: str
+    host: str
+    port: int
+    has_credentials: bool
+    path_present: bool
+    query_present: bool
+
+
+class RTSPDiagnosticHint(BaseModel):
+    """Operator-facing guidance for a diagnostic result."""
+
+    code: str
+    title: str
+    detail: str
+
+
+class RTSPDiagnosticResponse(BaseModel):
+    """Structured RTSP diagnostic payload."""
+
+    camera_id: Optional[UUID] = None
+    camera_name: Optional[str] = None
+    status: RTSPDiagnosticStatus
+    category: RTSPDiagnosticCategory
+    summary: str
+    target: RTSPDiagnosticTarget
+    runtime: RTSPDiagnosticRuntimeContext
+    hints: List[RTSPDiagnosticHint] = Field(default_factory=list)
+
+
 # ============================================
 # PERSON SCHEMAS (Phase 4)
 # ============================================

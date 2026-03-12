@@ -1,6 +1,6 @@
 """Streaming router - MJPEG video streaming for cameras."""
 from uuid import UUID
-from typing import Generator
+from typing import Generator, cast
 
 import cv2
 from fastapi import APIRouter, Depends, HTTPException, Response, status
@@ -9,6 +9,8 @@ from sqlalchemy.orm import Session
 
 from ..db import get_db
 from ..models import Camera, User
+from ..rtsp_diagnostics import build_stream_error
+from ..schemas import RTSPDiagnosticCategory
 from ..security import get_current_user_for_media
 from ..config import settings
 from cryptography.fernet import Fernet
@@ -49,23 +51,17 @@ def open_camera_capture(rtsp_url: str) -> cv2.VideoCapture:
 
     if not cap.isOpened():
         cap.release()
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Camera stream unavailable"
-        )
+        raise build_stream_error(rtsp_url, status.HTTP_503_SERVICE_UNAVAILABLE)
 
     return cap
 
 
-def capture_frame(cap: cv2.VideoCapture, error_detail: str):
+def capture_frame(cap: cv2.VideoCapture, rtsp_url: str, category: RTSPDiagnosticCategory):
     ret, frame = cap.read()
 
     if not ret:
         cap.release()
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=error_detail
-        )
+        raise build_stream_error(rtsp_url, status.HTTP_502_BAD_GATEWAY, category)
 
     return frame
 
@@ -81,8 +77,8 @@ def encode_frame(frame) -> bytes:
     return buffer.tobytes()
 
 
-def capture_initial_frame_bytes(cap: cv2.VideoCapture) -> bytes:
-    frame = capture_frame(cap, "Failed to capture initial frame")
+def capture_initial_frame_bytes(cap: cv2.VideoCapture, rtsp_url: str) -> bytes:
+    frame = capture_frame(cap, rtsp_url, RTSPDiagnosticCategory.FIRST_FRAME_TIMEOUT)
 
     try:
         return encode_frame(frame)
@@ -123,11 +119,11 @@ async def get_snapshot(
     camera = get_camera_for_user(db, camera_id, current_user)
 
     fernet = get_fernet()
-    rtsp_url = decrypt_rtsp_url(camera.rtsp_url_encrypted, fernet)
+    rtsp_url = decrypt_rtsp_url(cast(str, camera.rtsp_url_encrypted), fernet)
 
     cap = open_camera_capture(rtsp_url)
 
-    frame = capture_frame(cap, "Failed to capture frame")
+    frame = capture_frame(cap, rtsp_url, RTSPDiagnosticCategory.FIRST_FRAME_TIMEOUT)
     cap.release()
 
     return Response(
@@ -150,10 +146,10 @@ async def stream_camera(
     camera = get_camera_for_user(db, camera_id, current_user)
 
     fernet = get_fernet()
-    rtsp_url = decrypt_rtsp_url(camera.rtsp_url_encrypted, fernet)
+    rtsp_url = decrypt_rtsp_url(cast(str, camera.rtsp_url_encrypted), fernet)
 
     cap = open_camera_capture(rtsp_url)
-    first_frame = capture_initial_frame_bytes(cap)
+    first_frame = capture_initial_frame_bytes(cap, rtsp_url)
 
     response = StreamingResponse(
         generate_frames(cap, first_frame),

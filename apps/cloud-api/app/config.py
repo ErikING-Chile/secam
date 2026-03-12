@@ -39,6 +39,11 @@ class Settings(BaseSettings):
     # Storage
     STORAGE_PATH: str = "/app/storage"
 
+    # RTSP diagnostics
+    RTSP_DIAGNOSTIC_SOCKET_TIMEOUT_SECONDS: float = 3.0
+    RTSP_DIAGNOSTIC_OPEN_TIMEOUT_MS: int = 3000
+    RTSP_DIAGNOSTIC_READ_TIMEOUT_MS: int = 3000
+
     class Config:
         env_file = ".env"
         case_sensitive = True

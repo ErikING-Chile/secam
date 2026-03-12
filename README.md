@@ -218,6 +218,7 @@ secam/
 | GET | `/api/v1/cameras/{id}` | Ver cámara |
 | PUT | `/api/v1/cameras/{id}` | Actualizar cámara |
 | DELETE | `/api/v1/cameras/{id}` | Eliminar cámara |
+| POST | `/api/v1/cameras/{id}/test` | Diagnóstico RTSP saneado para troubleshooting |
 
 ### Personas
 | Método | Endpoint | Descripción |
@@ -298,6 +299,13 @@ npm run build
 
 - `npm run lint` no entra en la verificacion repetible por ahora: `next lint` sigue siendo interactivo si falta la configuracion de ESLint local.
 - Si necesitas correr lint despues, agrega primero la configuracion de ESLint para evitar el prompt interactivo.
+
+### Diagnostico RTSP host vs Docker
+
+- Si la vista en vivo falla, el modal sigue intentando primero el stream MJPEG y despues pide `POST /api/v1/cameras/{id}/test` para mostrar un diagnostico RTSP accionable.
+- El backend devuelve solo datos saneados del target (`host`, `port`, flags de path/query/credenciales) y nunca expone la URL RTSP desencriptada.
+- Cuando el backend corre dentro de Docker, una URL RTSP con `localhost` o `127.0.0.1` se reporta explicitamente como problema de loopback del contenedor.
+- Puedes ajustar el timeout del probe con `RTSP_DIAGNOSTIC_SOCKET_TIMEOUT_SECONDS`, `RTSP_DIAGNOSTIC_OPEN_TIMEOUT_MS` y `RTSP_DIAGNOSTIC_READ_TIMEOUT_MS`.
 
 ---
 
