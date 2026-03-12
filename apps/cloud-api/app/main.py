@@ -24,25 +24,25 @@ from . import models
 async def lifespan(app: FastAPI):
     """Application lifespan handler."""
     # Startup
-    print(f"🚀 Starting {settings.APP_NAME} v{settings.APP_VERSION}")
-    print(f"📦 Environment: {settings.ENVIRONMENT}")
+    print(f"[startup] Starting {settings.APP_NAME} v{settings.APP_VERSION}")
+    print(f"[startup] Environment: {settings.ENVIRONMENT}")
     
     # Create database tables
     Base.metadata.create_all(bind=engine)
-    print("✅ Database tables created")
+    print("[startup] Database tables created")
     
     # Check Redis connection
     try:
         r = redis.from_url(settings.REDIS_URL)
         r.ping()
-        print("✅ Redis connected")
+        print("[startup] Redis connected")
     except Exception as e:
-        print(f"⚠️  Redis connection failed: {e}")
+        print(f"[startup] Redis connection failed: {e}")
     
     yield
     
     # Shutdown
-    print("👋 Shutting down...")
+    print("[shutdown] Shutting down...")
 
 
 # Create FastAPI app
